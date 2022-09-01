@@ -1,5 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:5.0-focal-arm64v8 as builder
-
+FROM mcr.microsoft.com/dotnet/sdk:5.0-focal-arm64v8
 ENV DEBIAN_FRONTEND=noninteractive
 ENV OPENCV_VERSION=4.6.0
 
@@ -97,19 +96,12 @@ RUN mkdir /opencvsharp/make && cd /opencvsharp/make && \
     make -j$(nproc) && make install && \
     rm -rf /opencv && \
     rm -rf /opencv_contrib && \
-    cp /opencvsharp/make/OpenCvSharpExtern/libOpenCvSharpExtern.so /usr/lib/
+    mkdir /artifacts && \
+    cp /opencvsharp/make/OpenCvSharpExtern/libOpenCvSharpExtern.so /artifacts/
 
-
-########## Test native .so file ##########
-
-FROM mcr.microsoft.com/dotnet/sdk:5.0-focal-arm64v8l
-RUN apt-get update && apt-get -y install --no-install-recommends gcc
-# /usr/lib/libOpenCvSharpExtern.so
-# /usr/local/lib/libopencv_*.a
-COPY --from=builder /usr/lib /usr/lib
-#COPY --from=builder /usr/local/lib /usr/local/lib
-
-RUN echo "\n\
+# Test OpenCvSharpExtern
+RUN cp artifacts/libOpenCvSharpExtern.so /usr/lib/ && \
+    echo "\n\
 #include <stdio.h> \n\
 int core_Mat_sizeof(); \n\
 int main(){ \n\
@@ -118,24 +110,27 @@ int main(){ \n\
   return 0; \n\
 }" > /test.c && \
     gcc -I./ -L./ test.c -o test -lOpenCvSharpExtern && \
-    LD_LIBRARY_PATH=. ./test 
+    LD_LIBRARY_PATH=. ./test && \
+    rm -f /test*
 
-
-########## Test .NET class libraries ##########
-
-FROM mcr.microsoft.com/dotnet/sdk:5.0-focal
-COPY --from=builder /usr/lib /usr/lib
 # Install Build the C# part of OpenCvSharp
-RUN git clone -b cp_main https://github.com/vnetb/opencvsharp.git && cd opencvsharp
-RUN cd /opencvsharp/src/OpenCvSharp && \
-    dotnet build -c Release -f net5.0 && \
-    cd /opencvsharp/src/OpenCvSharp.Extensions && \
-    dotnet build -c Release -f net5.0
+#RUN cd /opencvsharp/src/OpenCvSharp && \
+#    dotnet build -c Release -f netstandard2.1 && \
+#    cd /opencvsharp/src/OpenCvSharp.Blob && \
+#    dotnet build -c Release -f netstandard2.1 && \
+#    cd /opencvsharp/src/OpenCvSharp.Extensions && \
+#    dotnet build -c Release -f netstandard2.1 && \
+#    cp /opencvsharp/src/OpenCvSharp/bin/Release/netstandard2.1/* /artifacts/ && \
+#    cp /opencvsharp/src/OpenCvSharp.Blob/bin/Release/netstandard2.1/* /artifacts/ && \
+#    cp /opencvsharp/src/OpenCvSharp.Extensions/bin/Release/netstandard2.1/* /artifacts/ 
 
-RUN dotnet test /opencvsharp/test/OpenCvSharp.Tests/OpenCvSharp.Tests.csproj -c Release -f net5.0 --runtime linux-arm64 --logger "trx;LogFileName=test-results.trx" < /dev/null
+# Test OpenCvSharp
+#RUN dotnet test /opencvsharp/test/OpenCvSharp.Tests/OpenCvSharp.Tests.csproj -c Release -f netcoreapp3.1 --runtime ubuntu.18.04-x64 --logger "trx;LogFileName=test-results.trx" < /dev/null
+
+RUN rm -rf /opencvsharp
 
 # Simple console app test using NuGet
-# RUN dotnet new console -f net6.0 -o "ConsoleApp01" && cd /ConsoleApp01 && \
+#RUN dotnet new console -f netcoreapp3.1 -o "ConsoleApp01" && cd /ConsoleApp01 && \
 #    echo "\n\
 #using System; \n\
 #using OpenCvSharp; \n\
@@ -151,10 +146,3 @@ RUN dotnet test /opencvsharp/test/OpenCvSharp.Tests/OpenCvSharp.Tests.csproj -c 
 #    rm -rf /ConsoleApp01
 
 RUN ldd /artifacts/libOpenCvSharpExtern.so
-
-
-
-########## Final image ##########
-
-FROM mcr.microsoft.com/dotnet/sdk:5.0-focal-arm64v8  as final
-COPY --from=builder /usr/lib /usr/lib
