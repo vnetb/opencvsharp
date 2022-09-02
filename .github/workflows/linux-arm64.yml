@@ -42,7 +42,12 @@ jobs:
           sed -E --in-place=.bak "s/<version>[0-9]\.[0-9]{1,2}\.[0-9]{1,2}.[0-9]{8}(-beta[0-9]*)?<\/version>/<version>${OPENCV_VERSION}.$(date '+%Y%m%d')<\/version>/" nuget/OpenCvSharp4.runtime.linux-arm.nuspec
           cp artifacts/libOpenCvSharpExtern.so nuget/
           dotnet pack nuget/OpenCvSharp4.runtime.linux-arm.csproj -o artifacts_arm
-
+      
+      - uses: actions/upload-artifact@v2
+        with:
+          name: artifacts_linux_arm_lib
+          path: artifacts/libOpenCvSharpExtern.so 
+          
       - uses: actions/upload-artifact@v2
         with:
           name: artifacts_linux_arm
